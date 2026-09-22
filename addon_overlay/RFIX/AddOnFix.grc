@@ -1,0 +1,5 @@
+// Replace 1 / 1 with your Graphisoft developer/local MDID for normal licensed Archicad distribution.
+'MDID' 32500 "Add-On Identifier" {
+    1
+    1
+}

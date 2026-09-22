@@ -1,0 +1,40 @@
+name: Build Archicad 25 AI Visualizer
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+jobs:
+  build-ac25:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone Graphisoft template
+        shell: pwsh
+        run: git clone --depth 1 --recurse-submodules https://github.com/GRAPHISOFT/archicad-addon-cmake.git template
+      - name: Overlay source
+        shell: pwsh
+        run: |
+          Copy-Item addon_overlay/Src/* template/Src/ -Force
+          Copy-Item addon_overlay/RINT/AddOn.grc template/RINT/AddOn.grc -Force
+          Copy-Item addon_overlay/RFIX/AddOnFix.grc template/RFIX/AddOnFix.grc -Force
+          Copy-Item addon_overlay/config.json template/config.json -Force
+      - name: Download AC25 DevKit
+        shell: pwsh
+        run: python tools/download_and_unzip.py "https://github.com/GRAPHISOFT/archicad-api-devkit/releases/download/25.3002/API.Development.Kit.WIN.25.3002.zip" "DevKit25"
+      - name: Configure
+        shell: pwsh
+        run: cmake -B template/Build -G "Visual Studio 17 2022" -A x64 -T v142 -DAC_VERSION=25 -DAC_API_DEVKIT_DIR="${{ github.workspace }}/DevKit25/Support" template
+      - name: Build
+        shell: pwsh
+        run: cmake --build template/Build --config RelWithDebInfo
+      - name: Collect
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item template/Build/RelWithDebInfo/*.apx package/
+          Copy-Item server package/server -Recurse
+          Copy-Item README_RU.md package/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Archicad25_AI_Visualizer
+          path: package

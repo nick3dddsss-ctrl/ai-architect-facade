@@ -1,0 +1,10 @@
+#include "ResourceIds.hpp"
+'STR#' ID_ADDON_INFO "Add-on Name and Description" {
+/* [  1] */ "AI Visualizer"
+/* [  2] */ "Local Stable Diffusion + ControlNet visualizer for Archicad 25"
+}
+'STR#' ID_ADDON_MENU "Strings for the Menu" {
+/* [  1] */ "AI Visualizer..."
+/* [  2] */ "Check AI Server"
+/* [  3] */ "Open AI UI"
+}

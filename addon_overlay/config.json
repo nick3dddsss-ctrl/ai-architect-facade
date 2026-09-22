@@ -1,0 +1,13 @@
+{
+  "addOnName": "AIVisualizer",
+  "description": "Local Stable Diffusion and ControlNet visualizer for Archicad 25",
+  "defaultLanguage": "INT",
+  "languages": [
+    "INT"
+  ],
+  "version": "1.0.0",
+  "copyright": {
+    "name": "AI Visualizer",
+    "year": "2026"
+  }
+}
