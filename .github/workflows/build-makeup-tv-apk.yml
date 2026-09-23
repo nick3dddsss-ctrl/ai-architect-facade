@@ -28,6 +28,7 @@ jobs:
 
       - name: Unpack Android project
         run: |
+          rm -rf makeup-tv/build-src
           mkdir -p makeup-tv/build-src
           base64 -d makeup-tv/project.zip.b64 > /tmp/makeup-tv-project.zip
           unzip -q /tmp/makeup-tv-project.zip -d makeup-tv/build-src
@@ -39,11 +40,11 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p dist
-          cp makeup-tv/build-src/app/build/outputs/apk/debug/app-debug.apk dist/Dania-Fedorina-Makeup-TV-v0.1.apk
+          cp makeup-tv/build-src/app/build/outputs/apk/debug/app-debug.apk dist/Dania-Fedorina-Makeup-TV-v1.0.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dania-Fedorina-Makeup-TV-APK
-          path: dist/Dania-Fedorina-Makeup-TV-v0.1.apk
+          name: Dania-Fedorina-Makeup-TV-v1.0.0
+          path: dist/Dania-Fedorina-Makeup-TV-v1.0.0.apk
           if-no-files-found: error
