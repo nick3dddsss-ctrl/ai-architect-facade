@@ -1,31 +1,44 @@
-# Tapir AI Visualizer для Archicad 25
+# Tapir AI Visualizer для Archicad 25 — версия для диска F:
 
-Эта версия **не требует собственного MDID** и не использует наш AIVisualizer.apx.
+Эта сборка специально переделана так, чтобы **все крупные данные проекта хранились на диске F:**.
 
-Схема работы:
+Папка установки:
 
-**Archicad 25 → готовый Tapir Add-On → локальный Python-мост → захват текущего вида → Stable Diffusion 1.5 + ControlNet Canny**
+`F:\TapirAIVisualizer`
+
+Туда помещаются:
+
+- Tapir Add-On;
+- программа AI Visualizer;
+- виртуальная среда Python и все Python-библиотеки;
+- PyTorch;
+- Stable Diffusion и ControlNet;
+- Hugging Face cache;
+- pip cache;
+- временные файлы;
+- результаты генерации.
+
+На диске C: остаются только уже установленный Windows/Python/Archicad и их системные компоненты. Новые многогигабайтные модели и библиотеки эта сборка направляет на F:.
 
 ## Установка
 
-1. Запусти `DOWNLOAD_TAPIR_AC25.bat` — он скачает готовый Tapir для Archicad 25.
-2. В Archicad открой **Параметры / Менеджер расширений → Добавить** и выбери `Tapir\TapirAddOn_AC25_Win.apx`.
-3. Перезапусти Archicad, если он попросит.
-4. Открой проект и нужный 3D-вид.
-5. Запусти `START_TAPIR_AI.bat`.
-6. При первом запуске установятся Python-библиотеки и локальная AI-модель. Это может занять заметное время и несколько гигабайт диска.
-7. В браузере откроется `http://127.0.0.1:8100`.
-8. Вверху должны стать зелёными **Archicad** и **Tapir**.
-9. Нажми **Снять текущий вид Archicad**, затем **Сгенерировать**.
+1. Распакуй архив куда угодно.
+2. Запусти `INSTALL_TO_F.bat`.
+3. Будет создана папка `F:\TapirAIVisualizer`.
+4. Tapir автоматически загрузится сюда: `F:\TapirAIVisualizer\Tapir\TapirAddOn_AC25_Win.apx`.
+5. В Archicad открой **Параметры → Менеджер расширений → Добавить** и выбери этот `.apx`.
+6. Запусти `F:\TapirAIVisualizer\START_TAPIR_AI.bat`.
 
-## Что важно
+## Куда идут большие файлы
 
-- Archicad должен быть запущен, а проект открыт.
-- Tapir общается с Archicad через локальный JSON API на `127.0.0.1:19723`.
-- Изображения и генерация остаются на компьютере.
-- Для RTX 3050 8 GB начни с `896×640`, 24–28 шагов, Strength `0.42–0.52`, ControlNet `0.85–1.0`.
-- Если автоматический поиск области вида захватывает не ту часть окна, сними флажок **«Автоматически искать область вида»** — тогда будет захвачено окно Archicad целиком.
+- Python venv: `F:\TapirAIVisualizer\.venv`
+- модели Hugging Face: `F:\TapirAIVisualizer\models\huggingface`
+- Torch cache: `F:\TapirAIVisualizer\models\torch`
+- pip cache: `F:\TapirAIVisualizer\cache\pip`
+- Python cache: `F:\TapirAIVisualizer\cache\pycache`
+- TEMP/TMP: `F:\TapirAIVisualizer\temp`
+- результаты: `F:\TapirAIVisualizer\tapir_ai\data\results`
 
-## Почему Tapir
+Желательно иметь на F: не менее **15–20 ГБ свободного места**.
 
-Tapir уже предоставляет готовый Add-On для Archicad 25 и дополнительные JSON-команды. Наш код работает с ним как внешняя программа, поэтому отдельный собственный `.apx` с нашим MDID не нужен.
+Если старая версия уже успела скачать модели на C:, эта новая версия их автоматически не удаляет. После проверки версии на F: старые кэши можно удалить отдельно.
