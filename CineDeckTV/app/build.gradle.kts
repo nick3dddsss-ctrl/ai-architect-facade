@@ -2,12 +2,12 @@ plugins { id("com.android.application") }
 
 android {
     namespace = "com.cinedeck.tv"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.cinedeck.tv"
         minSdk = 23
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 4
         versionName = "0.4.0"
     }
