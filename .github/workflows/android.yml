@@ -14,6 +14,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # GitHub runner already contains Android command-line tools.
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses >/dev/null || true
       - name: Install Android SDK packages
