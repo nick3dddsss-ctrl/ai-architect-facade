@@ -17,13 +17,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Prepare offline catalog and posters
-        run: python3 CineDeckTV/tools/prepare_offline_catalog.py
-      - name: Inspect bundled catalog
+      - name: Verify APK contains no bundled movie catalog
         run: |
-          test -f CineDeckTV/app/src/main/assets/catalog.json
-          echo "Catalog bytes: $(wc -c < CineDeckTV/app/src/main/assets/catalog.json)"
-          echo "Posters: $(find CineDeckTV/app/src/main/assets/posters -type f | wc -l)"
+          rm -rf CineDeckTV/app/src/main/assets/catalog.json CineDeckTV/app/src/main/assets/posters
+          echo "Offline catalog/posters removed before build"
       - name: Install Android SDK packages
         shell: bash
         run: |
@@ -40,6 +37,6 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: CineDeckTV-debug-apk
+          name: CineDeckTV-online-apk
           path: CineDeckTV/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
