@@ -3,7 +3,6 @@ plugins { id("com.android.application") }
 android {
     namespace = "com.cinedeck.tv"
     compileSdk = 36
-
     defaultConfig {
         applicationId = "com.cinedeck.tv"
         minSdk = 23
@@ -11,7 +10,6 @@ android {
         versionCode = 10
         versionName = "1.0.0"
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
