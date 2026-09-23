@@ -26,15 +26,12 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Reassemble Android project
+      - name: Unpack Android project
         run: |
           rm -rf makeup-tv/build-src
           mkdir -p makeup-tv/build-src
-          cat makeup-tv/parts/project.part* > /tmp/makeup-tv-project.b64
-          test "$(wc -c < /tmp/makeup-tv-project.b64)" -eq 33556
-          base64 -d /tmp/makeup-tv-project.b64 > /tmp/makeup-tv-project.zip
-          unzip -t /tmp/makeup-tv-project.zip
-          unzip -q /tmp/makeup-tv-project.zip -d makeup-tv/build-src
+          unzip -t makeup-tv/project-v1.1.0.zip
+          unzip -q makeup-tv/project-v1.1.0.zip -d makeup-tv/build-src
 
       - name: Build debug APK
         working-directory: makeup-tv/build-src
@@ -43,11 +40,11 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p dist
-          cp makeup-tv/build-src/app/build/outputs/apk/debug/app-debug.apk dist/Dania-Fedorina-Makeup-TV-v1.0.0.apk
+          cp makeup-tv/build-src/app/build/outputs/apk/debug/app-debug.apk dist/Dania-Fedorina-Makeup-TV-v1.1.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dania-Fedorina-Makeup-TV-v1.0.0
-          path: dist/Dania-Fedorina-Makeup-TV-v1.0.0.apk
+          name: Dania-Fedorina-Makeup-TV-v1.1.0
+          path: dist/Dania-Fedorina-Makeup-TV-v1.1.0.apk
           if-no-files-found: error
