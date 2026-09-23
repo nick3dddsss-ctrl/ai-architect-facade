@@ -26,11 +26,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Unpack Android project
+      - name: Reassemble Android project
         run: |
           rm -rf makeup-tv/build-src
           mkdir -p makeup-tv/build-src
-          base64 -d makeup-tv/project.zip.b64 > /tmp/makeup-tv-project.zip
+          cat makeup-tv/parts/project.part* > /tmp/makeup-tv-project.b64
+          test "$(wc -c < /tmp/makeup-tv-project.b64)" -eq 33556
+          base64 -d /tmp/makeup-tv-project.b64 > /tmp/makeup-tv-project.zip
+          unzip -t /tmp/makeup-tv-project.zip
           unzip -q /tmp/makeup-tv-project.zip -d makeup-tv/build-src
 
       - name: Build debug APK
