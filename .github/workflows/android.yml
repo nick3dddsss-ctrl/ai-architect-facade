@@ -17,6 +17,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Prepare offline catalog and posters
+        run: python3 CineDeckTV/tools/prepare_offline_catalog.py
+      - name: Inspect bundled catalog
+        run: |
+          test -f CineDeckTV/app/src/main/assets/catalog.json
+          echo "Catalog bytes: $(wc -c < CineDeckTV/app/src/main/assets/catalog.json)"
+          echo "Posters: $(find CineDeckTV/app/src/main/assets/posters -type f | wc -l)"
       - name: Install Android SDK packages
         shell: bash
         run: |
