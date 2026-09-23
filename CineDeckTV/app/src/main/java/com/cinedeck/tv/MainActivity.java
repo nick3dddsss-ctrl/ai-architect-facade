@@ -2,7 +2,6 @@ package com.cinedeck.tv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -16,8 +15,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Html;
 import android.text.InputType;
+import android.util.LruCache;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -32,7 +31,6 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.util.LruCache;
 
 import androidx.annotation.Nullable;
 import androidx.media3.common.util.UnstableApi;
@@ -42,10 +40,8 @@ import androidx.media3.ui.PlayerView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -53,9 +49,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -174,8 +168,7 @@ public class MainActivity extends Activity {
     }
 
     private void addServiceStrip() {
-        TextView t = text("Российские сервисы", 22, Color.WHITE, true);
-        root.addView(t);
+        root.addView(text("Российские сервисы", 22, Color.WHITE, true));
         root.addView(spacer(8));
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -254,9 +247,7 @@ public class MainActivity extends Activity {
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout line = row();
-        for (ShowItem item : items) {
-            line.addView(mediaCard(item));
-        }
+        for (ShowItem item : items) line.addView(mediaCard(item));
         scroll.addView(line);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(330)));
         return scroll;
@@ -280,8 +271,7 @@ public class MainActivity extends Activity {
         name.setMaxLines(1);
         card.addView(name, new LinearLayout.LayoutParams(dp(178), dp(30)));
         String meta = (item.year.isEmpty() ? "" : item.year + " • ") + (item.rating.isEmpty() ? "TV" : "★ " + item.rating);
-        TextView sub = text(meta, 13, MUTED, false);
-        card.addView(sub, new LinearLayout.LayoutParams(dp(178), dp(26)));
+        card.addView(text(meta, 13, MUTED, false), new LinearLayout.LayoutParams(dp(178), dp(26)));
 
         card.setOnFocusChangeListener((v, hasFocus) -> {
             card.setBackground(roundRect(hasFocus ? FOCUS : PANEL, 14));
@@ -352,16 +342,16 @@ public class MainActivity extends Activity {
     }
 
     private View searchResultRow(ShowItem item) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setFocusable(true);
-        row.setClickable(true);
-        row.setPadding(dp(10), dp(8), dp(16), dp(8));
-        row.setBackground(roundRect(PANEL, 12));
+        LinearLayout resultRow = new LinearLayout(this);
+        resultRow.setOrientation(LinearLayout.HORIZONTAL);
+        resultRow.setGravity(Gravity.CENTER_VERTICAL);
+        resultRow.setFocusable(true);
+        resultRow.setClickable(true);
+        resultRow.setPadding(dp(10), dp(8), dp(16), dp(8));
+        resultRow.setBackground(roundRect(PANEL, 12));
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        row.addView(image, new LinearLayout.LayoutParams(dp(82), dp(112)));
+        resultRow.addView(image, new LinearLayout.LayoutParams(dp(82), dp(112)));
         loadImage(image, item.posterUrl);
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
@@ -371,13 +361,13 @@ public class MainActivity extends Activity {
         TextView summary = text(item.summary, 14, Color.LTGRAY, false);
         summary.setMaxLines(2);
         info.addView(summary);
-        row.addView(info, new LinearLayout.LayoutParams(0, dp(112), 1));
-        row.setOnFocusChangeListener((v, focused) -> row.setBackground(roundRect(focused ? FOCUS : PANEL, 12)));
-        row.setOnClickListener(v -> showDetails(item));
+        resultRow.addView(info, new LinearLayout.LayoutParams(0, dp(112), 1));
+        resultRow.setOnFocusChangeListener((v, focused) -> resultRow.setBackground(roundRect(focused ? FOCUS : PANEL, 12)));
+        resultRow.setOnClickListener(v -> showDetails(item));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(130));
         lp.setMargins(0, 0, 0, dp(10));
-        row.setLayoutParams(lp);
-        return row;
+        resultRow.setLayoutParams(lp);
+        return resultRow;
     }
 
     private void showDetails(ShowItem item) {
@@ -419,8 +409,7 @@ public class MainActivity extends Activity {
         info.addView(actions);
 
         info.addView(spacer(12));
-        TextView hint = text("CineDeck не обходит DRM: платный контент открывается в официальном приложении сервиса. Свои M3U/HLS/DASH/MP4 воспроизводятся внутри CineDeck.", 13, MUTED, false);
-        info.addView(hint);
+        info.addView(text("Платный контент открывается в официальном приложении сервиса. Свои M3U/HLS/DASH/MP4 воспроизводятся внутри CineDeck.", 13, MUTED, false));
         body.addView(info, new LinearLayout.LayoutParams(0, dp(390), 1));
         root.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(400)));
     }
@@ -486,11 +475,9 @@ public class MainActivity extends Activity {
         for (Service s : services) {
             LinearLayout line = row();
             line.setGravity(Gravity.CENTER_VERTICAL);
-            TextView info = text(s.name + "\n" + s.note, 18, Color.WHITE, true);
-            line.addView(info, new LinearLayout.LayoutParams(dp(420), dp(74)));
+            line.addView(text(s.name + "\n" + s.note, 18, Color.WHITE, true), new LinearLayout.LayoutParams(dp(420), dp(74)));
             boolean installed = getPackageManager().getLaunchIntentForPackage(s.packageName) != null;
-            TextView state = text(installed ? "● установлено" : "○ открыть сайт", 15, installed ? GOOD : MUTED, false);
-            line.addView(state, new LinearLayout.LayoutParams(dp(190), dp(74)));
+            line.addView(text(installed ? "● установлено" : "○ открыть сайт", 15, installed ? GOOD : MUTED, false), new LinearLayout.LayoutParams(dp(190), dp(74)));
             Button open = action(installed ? "Открыть" : "Сайт");
             open.setOnClickListener(v -> openService(s, null));
             line.addView(open, new LinearLayout.LayoutParams(dp(180), dp(58)));
@@ -508,13 +495,10 @@ public class MainActivity extends Activity {
             if (launch != null) {
                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(launch);
-                if (query != null && !query.isEmpty()) {
-                    Toast.makeText(this, "Поиск: " + query, Toast.LENGTH_LONG).show();
-                }
+                if (query != null && !query.isEmpty()) Toast.makeText(this, "Поиск: " + query, Toast.LENGTH_LONG).show();
                 return;
             }
-            Uri uri = Uri.parse(service.webUrl);
-            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(service.webUrl)));
         } catch (Exception e) {
             Toast.makeText(this, "Не удалось открыть " + service.name, Toast.LENGTH_LONG).show();
         }
@@ -560,7 +544,7 @@ public class MainActivity extends Activity {
         scroll.addView(list);
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        final String finalPlaylistUrl = playlistUrl;
+        String finalPlaylistUrl = playlistUrl;
         io.execute(() -> {
             List<ChannelItem> channels = loadM3u(finalPlaylistUrl);
             main.post(() -> {
@@ -591,7 +575,6 @@ public class MainActivity extends Activity {
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
         frame.addView(playerView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
         TextView label = text("←  " + title, 16, Color.WHITE, true);
         label.setBackground(roundRect(Color.argb(170, 0, 0, 0), 10));
         label.setPadding(dp(14), 0, dp(14), 0);
@@ -635,7 +618,7 @@ public class MainActivity extends Activity {
                 try {
                     ShowItem item = getShow(Integer.parseInt(s));
                     if (item != null) items.add(item);
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) { }
             }
             main.post(() -> {
                 root.removeView(progress);
@@ -648,9 +631,8 @@ public class MainActivity extends Activity {
     private void showSettings() {
         prepareScreen();
         root.addView(text("Настройки", 34, Color.WHITE, true));
-        root.addView(text("CineDeck RU 1.0 • рассчитан на Android TV и AOSP-приставки, в том числе используемые в России.", 15, MUTED, false));
+        root.addView(text("CineDeck RU 1.0 • Android TV и AOSP-приставки, в том числе используемые в России.", 15, MUTED, false));
         root.addView(spacer(16));
-
         root.addView(text("M3U / IPTV-плейлист", 18, Color.WHITE, true));
         EditText m3u = new EditText(this);
         m3u.setText(prefs.getString(KEY_M3U, ""));
@@ -668,7 +650,6 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Плейлист сохранён", Toast.LENGTH_SHORT).show();
         });
         root.addView(save, new LinearLayout.LayoutParams(dp(260), dp(58)));
-
         root.addView(spacer(20));
         Button clearHistory = action("Очистить историю");
         clearHistory.setOnClickListener(v -> {
@@ -676,22 +657,19 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "История очищена", Toast.LENGTH_SHORT).show();
         });
         root.addView(clearHistory, new LinearLayout.LayoutParams(dp(260), dp(58)));
-
         root.addView(spacer(18));
-        root.addView(text("Поддерживаемое воспроизведение: HLS (.m3u8), DASH (.mpd), MP4 и форматы, поддерживаемые Android Media3. HTTP разрешён для пользовательских локальных/операторских плейлистов.", 14, MUTED, false));
+        root.addView(text("Плеер: HLS (.m3u8), DASH (.mpd), MP4 и форматы Media3. HTTP разрешён для пользовательских локальных/операторских плейлистов.", 14, MUTED, false));
     }
 
     private List<ShowItem> searchShows(String query) {
         List<ShowItem> out = new ArrayList<>();
         try {
-            String json = fetchText(TVMAZE + "/search/shows?q=" + Uri.encode(query));
-            JSONArray arr = new JSONArray(json);
+            JSONArray arr = new JSONArray(fetchText(TVMAZE + "/search/shows?q=" + Uri.encode(query)));
             for (int i = 0; i < arr.length() && i < 30; i++) {
-                JSONObject show = arr.getJSONObject(i).optJSONObject("show");
-                ShowItem item = parseShow(show);
+                ShowItem item = parseShow(arr.getJSONObject(i).optJSONObject("show"));
                 if (item != null) out.add(item);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { }
         return out;
     }
 
@@ -701,11 +679,8 @@ public class MainActivity extends Activity {
     }
 
     private ShowItem getShow(int id) {
-        try {
-            return parseShow(new JSONObject(fetchText(TVMAZE + "/shows/" + id)));
-        } catch (Exception e) {
-            return null;
-        }
+        try { return parseShow(new JSONObject(fetchText(TVMAZE + "/shows/" + id))); }
+        catch (Exception e) { return null; }
     }
 
     private ShowItem parseShow(JSONObject show) {
@@ -714,7 +689,6 @@ public class MainActivity extends Activity {
             ShowItem item = new ShowItem();
             item.id = show.optInt("id", -1);
             item.name = show.optString("name", "Без названия");
-            item.language = show.optString("language", "");
             item.premiered = show.optString("premiered", "");
             item.year = item.premiered.length() >= 4 ? item.premiered.substring(0, 4) : "";
             JSONObject rating = show.optJSONObject("rating");
@@ -726,10 +700,7 @@ public class MainActivity extends Activity {
                 item.genres = String.join(" • ", gs);
             }
             JSONObject image = show.optJSONObject("image");
-            if (image != null) {
-                item.posterUrl = image.optString("medium", "");
-                item.originalPosterUrl = image.optString("original", item.posterUrl);
-            }
+            if (image != null) item.posterUrl = image.optString("medium", "");
             String raw = show.optString("summary", "");
             item.summary = raw.isEmpty() ? "" : Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString().trim();
             JSONObject network = show.optJSONObject("network");
@@ -737,9 +708,7 @@ public class MainActivity extends Activity {
             if (network != null) item.network = network.optString("name", "");
             else if (webChannel != null) item.network = webChannel.optString("name", "");
             return item.id < 0 ? null : item;
-        } catch (Exception e) {
-            return null;
-        }
+        } catch (Exception e) { return null; }
     }
 
     private List<EpisodeItem> getEpisodes(int showId) {
@@ -755,7 +724,7 @@ public class MainActivity extends Activity {
                 ep.airdate = o.optString("airdate", "");
                 out.add(ep);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { }
         return out;
     }
 
@@ -777,7 +746,7 @@ public class MainActivity extends Activity {
                     pendingName = null;
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { }
         return out;
     }
 
@@ -792,18 +761,13 @@ public class MainActivity extends Activity {
             int n;
             while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
             return out.toString(StandardCharsets.UTF_8.name());
-        } finally {
-            c.disconnect();
-        }
+        } finally { c.disconnect(); }
     }
 
     private void loadImage(ImageView target, String url) {
         if (url == null || url.isEmpty()) return;
         Bitmap cached = imageCache.get(url);
-        if (cached != null) {
-            target.setImageBitmap(cached);
-            return;
-        }
+        if (cached != null) { target.setImageBitmap(cached); return; }
         io.execute(() -> {
             HttpURLConnection c = null;
             try {
@@ -818,10 +782,8 @@ public class MainActivity extends Activity {
                         main.post(() -> target.setImageBitmap(b));
                     }
                 }
-            } catch (Exception ignored) {
-            } finally {
-                if (c != null) c.disconnect();
-            }
+            } catch (Exception ignored) { }
+            finally { if (c != null) c.disconnect(); }
         });
     }
 
@@ -843,7 +805,7 @@ public class MainActivity extends Activity {
         String raw = prefs.getString(KEY_HISTORY, "");
         if (raw == null || raw.isEmpty()) return out;
         for (String s : raw.split(",")) {
-            try { out.add(Integer.parseInt(s)); } catch (Exception ignored) {}
+            try { out.add(Integer.parseInt(s)); } catch (Exception ignored) { }
         }
         return out;
     }
@@ -949,16 +911,13 @@ public class MainActivity extends Activity {
     private static class ShowItem {
         int id;
         String name = "";
-        String language = "";
         String premiered = "";
         String year = "";
         String rating = "";
         String genres = "";
         String posterUrl = "";
-        String originalPosterUrl = "";
         String summary = "";
         String network = "";
-
         String metaLine() {
             List<String> p = new ArrayList<>();
             if (!year.isEmpty()) p.add(year);
