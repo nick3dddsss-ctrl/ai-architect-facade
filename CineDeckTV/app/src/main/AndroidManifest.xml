@@ -13,7 +13,7 @@
         android:theme="@style/Theme.CineDeckTV"
         android:usesCleartextTraffic="true">
         <activity
-            android:name=".MainActivityPlayer"
+            android:name=".MainActivityAuto"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize"
             android:exported="true"
             android:screenOrientation="landscape">
