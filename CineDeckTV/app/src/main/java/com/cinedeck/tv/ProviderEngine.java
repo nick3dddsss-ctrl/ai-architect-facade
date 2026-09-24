@@ -11,7 +11,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -22,7 +21,8 @@ public final class ProviderEngine {
     private static final String WATCHHUB = "https://watchhub.strem.io";
     private static final String PUBLIC_DOMAIN = "https://caching.stremio.net/publicdomainmovies.now.sh";
     private static final String ARCHIVE = "https://archive.org";
-    private static final String UA = "CineDeckTV/1.4 AndroidTV";
+    private static final String COMMONS_API = "https://commons.wikimedia.org/w/api.php";
+    private static final String UA = "CineDeckTV/1.5 AndroidTV";
 
     public static final class Media {
         public String id = "";
@@ -38,6 +38,13 @@ public final class ProviderEngine {
         public String provider = "";
     }
 
+    public static final class SubtitleOption {
+        public String url = "";
+        public String label = "";
+        public String language = "und";
+        public String mime = "text/vtt";
+    }
+
     public static final class StreamOption {
         public String provider = "";
         public String title = "";
@@ -46,6 +53,8 @@ public final class ProviderEngine {
         public String youtubeId = "";
         public String quality = "";
         public int height = 0;
+        public long sizeBytes = 0;
+        public List<SubtitleOption> subtitles = new ArrayList<>();
         public boolean direct() { return url != null && !url.isEmpty(); }
         public boolean external() { return (externalUrl != null && !externalUrl.isEmpty()) || (youtubeId != null && !youtubeId.isEmpty()); }
         public String label() {
@@ -54,6 +63,14 @@ public final class ProviderEngine {
             if (quality != null && !quality.isEmpty()) {
                 if (s.length() > 0) s.append(" • ");
                 s.append(quality);
+            }
+            if (sizeBytes > 0) {
+                if (s.length() > 0) s.append(" • ");
+                s.append(humanSize(sizeBytes));
+            }
+            if (subtitles != null && !subtitles.isEmpty()) {
+                if (s.length() > 0) s.append(" • ");
+                s.append("CC ").append(subtitles.size());
             }
             if (title != null && !title.isEmpty()) {
                 if (s.length() > 0) s.append(" • ");
@@ -95,7 +112,18 @@ public final class ProviderEngine {
         if (media == null) return out;
 
         if (!media.archiveId.isEmpty()) {
-            try { out.addAll(resolveArchive(media)); } catch (Exception ignored) {}
+            try { out.addAll(resolveArchive(media.archiveId)); } catch (Exception ignored) {}
+        } else if ("movie".equalsIgnoreCase(media.type) && !media.name.isEmpty()) {
+            try {
+                List<Media> matches = fetchArchive(media.name, 8);
+                int accepted = 0;
+                for (Media candidate : matches) {
+                    if (!strongTitleMatch(media.name, candidate.name)) continue;
+                    if (!yearCompatible(media.year, candidate.year)) continue;
+                    out.addAll(resolveArchive(candidate.archiveId));
+                    if (++accepted >= 3 || out.size() >= 12) break;
+                }
+            } catch (Exception ignored) {}
         }
 
         if (!media.imdbId.isEmpty()) {
@@ -103,9 +131,14 @@ public final class ProviderEngine {
             try { out.addAll(resolveStremio(WATCHHUB, media.type, media.imdbId, "WatchHub")); } catch (Exception ignored) {}
         }
 
+        if ("movie".equalsIgnoreCase(media.type) && !media.name.isEmpty()) {
+            try { out.addAll(resolveCommons(media)); } catch (Exception ignored) {}
+        }
+
         Collections.sort(out, (a, b) -> {
             if (a.direct() != b.direct()) return a.direct() ? -1 : 1;
             if (a.direct() && b.direct() && a.height != b.height) return Integer.compare(b.height, a.height);
+            if (a.direct() && b.direct() && a.subtitles.size() != b.subtitles.size()) return Integer.compare(b.subtitles.size(), a.subtitles.size());
             return a.label().compareToIgnoreCase(b.label());
         });
         return dedupeStreams(out);
@@ -149,12 +182,13 @@ public final class ProviderEngine {
     }
 
     private List<Media> fetchArchive(String search, int limit) throws Exception {
+        String rights = "(licenseurl:* OR collection:feature_films OR collection:prelinger)";
         String q;
         if (search == null || search.trim().isEmpty()) {
-            q = "mediatype:movies AND (collection:opensource_movies OR licenseurl:*) AND NOT access-restricted-item:true";
+            q = "mediatype:movies AND " + rights + " AND NOT access-restricted-item:true";
         } else {
             String clean = search.trim().replace('"', ' ');
-            q = "mediatype:movies AND (collection:opensource_movies OR licenseurl:*) AND title:(\"" + clean + "\") AND NOT access-restricted-item:true";
+            q = "mediatype:movies AND " + rights + " AND title:(\"" + clean + "\") AND NOT access-restricted-item:true";
         }
         String url = ARCHIVE + "/advancedsearch.php?q=" + enc(q)
                 + "&fl[]=identifier&fl[]=title&fl[]=date&fl[]=description&fl[]=subject"
@@ -186,11 +220,29 @@ public final class ProviderEngine {
         return out;
     }
 
-    private List<StreamOption> resolveArchive(Media media) throws Exception {
-        JSONObject root = getJson(ARCHIVE + "/metadata/" + encPath(media.archiveId), 9000, 18000);
+    private List<StreamOption> resolveArchive(String archiveId) throws Exception {
+        JSONObject root = getJson(ARCHIVE + "/metadata/" + encPath(archiveId), 9000, 18000);
         JSONArray files = root.optJSONArray("files");
         List<StreamOption> out = new ArrayList<>();
+        List<SubtitleOption> subtitles = new ArrayList<>();
         if (files == null) return out;
+
+        for (int i = 0; i < files.length(); i++) {
+            JSONObject f = files.optJSONObject(i);
+            if (f == null) continue;
+            String name = f.optString("name", "");
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (name.isEmpty() || f.optBoolean("private", false)) continue;
+            if (lower.endsWith(".srt") || lower.endsWith(".vtt")) {
+                SubtitleOption sub = new SubtitleOption();
+                sub.url = ARCHIVE + "/download/" + encPath(archiveId) + "/" + encodeFilePath(name);
+                sub.mime = lower.endsWith(".srt") ? "application/x-subrip" : "text/vtt";
+                sub.language = inferLanguage(lower);
+                sub.label = subtitleLabel(sub.language, name);
+                subtitles.add(sub);
+            }
+        }
+
         for (int i = 0; i < files.length(); i++) {
             JSONObject f = files.optJSONObject(i);
             if (f == null) continue;
@@ -198,21 +250,58 @@ public final class ProviderEngine {
             String format = f.optString("format", "");
             String lower = name.toLowerCase(Locale.ROOT);
             if (name.isEmpty() || f.optBoolean("private", false)) continue;
-            boolean video = lower.endsWith(".mp4") || lower.endsWith(".m4v") || format.toLowerCase(Locale.ROOT).contains("mpeg4") || format.toLowerCase(Locale.ROOT).contains("h.264");
-            if (!video || lower.contains("thumb") || lower.contains("sample")) continue;
+            boolean video = lower.endsWith(".mp4") || lower.endsWith(".m4v") || lower.endsWith(".webm")
+                    || lower.endsWith(".m3u8") || lower.endsWith(".mpd")
+                    || format.toLowerCase(Locale.ROOT).contains("mpeg4") || format.toLowerCase(Locale.ROOT).contains("h.264");
+            if (!video || lower.contains("thumb") || lower.contains("sample") || lower.contains("spectrogram")) continue;
             StreamOption s = new StreamOption();
             s.provider = "Internet Archive";
-            s.url = ARCHIVE + "/download/" + encPath(media.archiveId) + "/" + encodeFilePath(name);
+            s.url = ARCHIVE + "/download/" + encPath(archiveId) + "/" + encodeFilePath(name);
             s.height = parseInt(f.optString("height", "0"));
-            s.quality = s.height > 0 ? s.height + "p" : format;
-            s.title = f.optString("source", "");
+            if (s.height == 0) s.height = parseQuality(qualityFromText(name));
+            s.quality = s.height > 0 ? s.height + "p" : containerLabel(lower, format);
+            s.sizeBytes = parseLong(f.optString("size", "0"));
+            String source = f.optString("source", "");
+            s.title = source.isEmpty() ? shortFileName(name) : source;
+            s.subtitles = new ArrayList<>(subtitles);
             out.add(s);
         }
         out.sort((a, b) -> {
             if (a.height != b.height) return Integer.compare(b.height, a.height);
-            return a.url.compareTo(b.url);
+            return Long.compare(b.sizeBytes, a.sizeBytes);
         });
-        if (out.size() > 8) return new ArrayList<>(out.subList(0, 8));
+        if (out.size() > 10) return new ArrayList<>(out.subList(0, 10));
+        return out;
+    }
+
+    private List<StreamOption> resolveCommons(Media media) throws Exception {
+        String query = "\"" + media.name + "\" filetype:video";
+        String url = COMMONS_API + "?action=query&generator=search&gsrsearch=" + enc(query)
+                + "&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime&format=json&formatversion=2&origin=*";
+        JSONObject root = getJson(url, 8000, 12000);
+        JSONObject q = root.optJSONObject("query");
+        JSONArray pages = q == null ? null : q.optJSONArray("pages");
+        List<StreamOption> out = new ArrayList<>();
+        if (pages == null) return out;
+        for (int i = 0; i < pages.length(); i++) {
+            JSONObject page = pages.optJSONObject(i);
+            if (page == null) continue;
+            String title = page.optString("title", "").replaceFirst("(?i)^File:", "");
+            if (!strongTitleMatch(media.name, title.replaceAll("\\.[A-Za-z0-9]{2,5}$", ""))) continue;
+            JSONArray info = page.optJSONArray("imageinfo");
+            JSONObject ii = info == null ? null : info.optJSONObject(0);
+            if (ii == null) continue;
+            String direct = ii.optString("url", "");
+            String mime = ii.optString("mime", "");
+            String lower = direct.toLowerCase(Locale.ROOT);
+            if (direct.isEmpty() || !(mime.startsWith("video/") || lower.endsWith(".webm") || lower.endsWith(".ogv") || lower.endsWith(".mp4"))) continue;
+            StreamOption s = new StreamOption();
+            s.provider = "Wikimedia Commons";
+            s.url = direct;
+            s.quality = containerLabel(lower, mime);
+            s.title = title;
+            out.add(s);
+        }
         return out;
     }
 
@@ -322,6 +411,65 @@ public final class ProviderEngine {
                 .replaceAll("\\s+", " ").trim();
     }
 
+    private static boolean strongTitleMatch(String a, String b) {
+        String x = norm(a);
+        String y = norm(b);
+        if (x.isEmpty() || y.isEmpty()) return false;
+        if (x.equals(y)) return true;
+        if (x.length() < 5 || y.length() < 5) return false;
+        String shorter = x.length() <= y.length() ? x : y;
+        String longer = x.length() > y.length() ? x : y;
+        return longer.contains(shorter) && ((double) shorter.length() / (double) longer.length()) >= 0.72;
+    }
+
+    private static boolean yearCompatible(String a, String b) {
+        if (a == null || a.isEmpty() || b == null || b.isEmpty()) return true;
+        try { return Math.abs(Integer.parseInt(a) - Integer.parseInt(b)) <= 1; }
+        catch (Exception e) { return true; }
+    }
+
+    private static String inferLanguage(String lower) {
+        if (lower.matches(".*(^|[._ -])(ru|rus|russian)([._ -]|$).*")) return "ru";
+        if (lower.matches(".*(^|[._ -])(en|eng|english)([._ -]|$).*")) return "en";
+        if (lower.matches(".*(^|[._ -])(es|spa|spanish)([._ -]|$).*")) return "es";
+        if (lower.matches(".*(^|[._ -])(fr|fre|fra|french)([._ -]|$).*")) return "fr";
+        if (lower.matches(".*(^|[._ -])(de|ger|deu|german)([._ -]|$).*")) return "de";
+        return "und";
+    }
+
+    private static String subtitleLabel(String lang, String name) {
+        if ("ru".equals(lang)) return "Русские";
+        if ("en".equals(lang)) return "English";
+        if ("es".equals(lang)) return "Español";
+        if ("fr".equals(lang)) return "Français";
+        if ("de".equals(lang)) return "Deutsch";
+        return shortFileName(name);
+    }
+
+    private static String containerLabel(String lower, String format) {
+        if (lower.endsWith(".m3u8")) return "HLS";
+        if (lower.endsWith(".mpd")) return "DASH";
+        if (lower.endsWith(".webm")) return "WEBM";
+        if (lower.endsWith(".ogv") || lower.endsWith(".ogg")) return "OGV";
+        if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "MP4";
+        return format == null || format.isEmpty() ? "VIDEO" : format;
+    }
+
+    private static String shortFileName(String name) {
+        if (name == null) return "";
+        String n = name;
+        int slash = n.lastIndexOf('/');
+        if (slash >= 0) n = n.substring(slash + 1);
+        return n.length() > 42 ? n.substring(0, 39) + "…" : n;
+    }
+
+    private static String humanSize(long bytes) {
+        if (bytes <= 0) return "";
+        double mb = bytes / (1024.0 * 1024.0);
+        if (mb >= 1024) return String.format(Locale.US, "%.1f GB", mb / 1024.0);
+        return String.format(Locale.US, "%.0f MB", mb);
+    }
+
     private static String extractYear(String raw) {
         if (raw == null) return "";
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("(19|20)\\d{2}").matcher(raw);
@@ -347,6 +495,10 @@ public final class ProviderEngine {
 
     private static int parseInt(String s) {
         try { return Integer.parseInt(s); } catch (Exception e) { return 0; }
+    }
+
+    private static long parseLong(String s) {
+        try { return Long.parseLong(s); } catch (Exception e) { return 0L; }
     }
 
     private static String firstNonEmpty(String a, String b) {
