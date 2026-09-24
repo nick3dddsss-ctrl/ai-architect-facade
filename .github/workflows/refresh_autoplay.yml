@@ -10,6 +10,10 @@ on:
   schedule:
     - cron: "35 3 * * *"
 
+concurrency:
+  group: cinedeck-official-autoplay
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -20,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: cinedeck-tv-build
+          fetch-depth: 0
       - name: Build official zero-config autoplay catalog
         run: python3 CineDeckTV/tools/prepare_autoplay_catalog.py
       - name: Commit autoplay feed and posters
@@ -31,5 +36,7 @@ jobs:
             echo "Autoplay feed unchanged"
           else
             git commit -m "Refresh CineDeck official autoplay feed [skip ci]"
+            git fetch origin cinedeck-tv-build
+            git rebase origin/cinedeck-tv-build
             git push origin HEAD:cinedeck-tv-build
           fi
