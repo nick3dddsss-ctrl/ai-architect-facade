@@ -101,7 +101,7 @@ def image_candidates(doc, page_url, title):
     def add(url, score, context=''):
         if not url:
             return
-        url = html.unescape(url).strip()
+        url = html.unescape(url).strip().strip('"\'')
         if url.startswith('//'):
             url = 'https:' + url
         url = urllib.parse.urljoin(page_url, url)
@@ -109,57 +109,80 @@ def image_candidates(doc, page_url, title):
         if parsed.scheme not in ('http', 'https'):
             return
         low = (url + ' ' + context).lower()
-        if any(x in low for x in ('sprite', 'favicon', 'logo.svg', 'icon-', 'social-', 'counter', 'pixel', 'captcha')):
-            score -= 120
-        if any(x in low for x in ('poster', 'afisha', 'film', 'cinema', 'preview', 'cover', 'detail')):
-            score += 25
+        if any(x in low for x in (
+            'top-shade', 'bottom-shade', 'frontend/src/assets', 'sprite',
+            'favicon', 'logo.svg', 'icon-', 'social-', 'counter', 'pixel',
+            'captcha', 'loader', 'placeholder'
+        )):
+            score -= 300
+        if '/upload/' in low or '/iblock/' in low:
+            score += 120
+        if any(x in low for x in ('poster', 'afisha', 'film', 'cinema', 'preview', 'cover', 'detail', 'lead-movie')):
+            score += 35
         candidates.append((score, url))
 
     for key in ('og:image', 'twitter:image', 'twitter:image:src'):
         value = meta(doc, key, prop=(key == 'og:image'))
         if value:
-            add(value, 150, key)
+            add(value, 180, key)
 
     for m in re.finditer(r'<link\b[^>]*>', doc, re.I | re.S):
         tag = m.group(0)
         rel = attr_value(tag, 'rel').lower()
         if 'image_src' in rel or 'preload' in rel:
-            add(attr_value(tag, 'href'), 120 if 'image_src' in rel else 30, tag)
+            add(attr_value(tag, 'href'), 140 if 'image_src' in rel else 20, tag)
 
     title_norm = re.sub(r'\s+', ' ', title.lower()).strip()
-    for m in re.finditer(r'<img\b[^>]*>', doc, re.I | re.S):
-        tag = m.group(0)
+    for tag_match in re.finditer(r'<(?:img|source)\b[^>]*>', doc, re.I | re.S):
+        tag = tag_match.group(0)
         context = ' '.join([
             attr_value(tag, 'class'),
             attr_value(tag, 'alt'),
             attr_value(tag, 'title'),
         ])
-        score = 45
+        score = 55
         c_low = context.lower()
         if title_norm and title_norm in c_low:
-            score += 100
-        if any(x in c_low for x in ('poster', 'afisha', 'film', 'cinema', 'cover', 'preview', 'detail')):
-            score += 60
+            score += 120
+        if any(x in c_low for x in ('poster', 'afisha', 'film', 'cinema', 'cover', 'preview', 'detail', 'lead-movie')):
+            score += 70
         if any(x in c_low for x in ('logo', 'icon', 'avatar', 'person', 'actor', 'director')):
-            score -= 80
+            score -= 100
         for name in ('data-src', 'data-original', 'data-lazy-src', 'src'):
             add(attr_value(tag, name), score + (15 if name != 'src' else 0), context)
         srcset = attr_value(tag, 'srcset') or attr_value(tag, 'data-srcset')
         if srcset:
             parts = [p.strip().split(' ')[0] for p in srcset.split(',') if p.strip()]
             if parts:
-                add(parts[-1], score + 20, context)
+                add(parts[-1], score + 30, context)
+
+    for tag_match in re.finditer(r'<[^>]+>', doc, re.I | re.S):
+        tag = tag_match.group(0)
+        context = attr_value(tag, 'class')
+        for name in ('data-bg', 'data-background', 'data-background-image', 'data-image'):
+            add(attr_value(tag, name), 105, context)
+        style = attr_value(tag, 'style')
+        if style:
+            for m in re.finditer(r'url\((["\']?)(.*?)\1\)', style, re.I):
+                add(m.group(2), 115, context)
+
+    for m in re.finditer(r'url\((["\']?)(.*?)\1\)', doc, re.I):
+        add(m.group(2), 65, 'css')
+    for m in re.finditer(r'["\']([^"\']*(?:/upload/|/iblock/)[^"\']+)["\']', doc, re.I):
+        add(m.group(1).replace('\\/', '/'), 95, 'upload')
 
     for p in (
-        r'["\'](?:poster|posterUrl|image|imageUrl|preview|cover)["\']\s*:\s*["\']([^"\']+)["\']',
+        r'["\'](?:poster|posterUrl|image|imageUrl|preview|cover|picture)["\']\s*:\s*["\']([^"\']+)["\']',
         r'(https?://[^"\'\s<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"\'\s<>]*)?)',
     ):
         for m in re.finditer(p, doc, re.I):
-            add(m.group(1).replace('\\/', '/'), 35, 'inline')
+            add(m.group(1).replace('\\/', '/'), 45, 'inline')
 
     seen = set()
     result = []
     for score, url in sorted(candidates, key=lambda x: x[0], reverse=True):
+        if score < 0:
+            continue
         if url not in seen:
             seen.add(url)
             result.append((score, url))
@@ -286,7 +309,7 @@ def main():
         raise SystemExit('Autoplay catalog too small: ' + str(len(items)))
 
     payload = {
-        'version': 2,
+        'version': 3,
         'generatedBy': 'CineDeck RU official zero-config provider',
         'provider': 'Мосфильм',
         'count': len(items),
