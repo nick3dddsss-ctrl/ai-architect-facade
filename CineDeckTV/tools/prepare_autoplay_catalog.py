@@ -5,6 +5,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -28,7 +29,7 @@ INDEXES = [
 ]
 
 
-def fetch(url, timeout=25):
+def fetch(url, timeout=18):
     req = urllib.request.Request(url, headers={
         'User-Agent': UA,
         'Accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
@@ -42,19 +43,25 @@ class LinkParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+
     def handle_starttag(self, tag, attrs):
         if tag.lower() != 'a':
             return
         href = dict(attrs).get('href')
-        if href and '/cinema/films/' in href and href.rstrip('/').split('/')[-1] != 'films':
-            self.links.append(urllib.parse.urljoin(BASE, href.split('#')[0]))
+        if not href:
+            return
+        absolute = urllib.parse.urljoin(BASE, href)
+        parsed = urllib.parse.urlparse(absolute)
+        # Real film pages look like /cinema/films/<slug>/; filter/index links are ignored.
+        if re.fullmatch(r'/cinema/films/[^/]+/?', parsed.path or ''):
+            self.links.append(urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', '')))
 
 
 def clean_text(s):
     if not s:
         return ''
-    s = re.sub(r'<script\b[^>]*>.*?</script>', ' ', s, flags=re.I|re.S)
-    s = re.sub(r'<style\b[^>]*>.*?</style>', ' ', s, flags=re.I|re.S)
+    s = re.sub(r'<script\b[^>]*>.*?</script>', ' ', s, flags=re.I | re.S)
+    s = re.sub(r'<style\b[^>]*>.*?</style>', ' ', s, flags=re.I | re.S)
     s = re.sub(r'<[^>]+>', ' ', s)
     s = html.unescape(s)
     return re.sub(r'\s+', ' ', s).strip()
@@ -81,14 +88,13 @@ def parse_film(url):
 
     title = meta(doc, 'og:title', True)
     if not title:
-        m = re.search(r'<h1[^>]*>(.*?)</h1>', doc, re.I|re.S)
+        m = re.search(r'<h1[^>]*>(.*?)</h1>', doc, re.I | re.S)
         title = clean_text(m.group(1)) if m else ''
     title = re.sub(r'\s*[|—-]\s*Киноконцерн.*$', '', title, flags=re.I).strip()
     if not title:
         return None
 
-    desc = meta(doc, 'description') or meta(doc, 'og:description', True)
-    desc = clean_text(desc)
+    desc = clean_text(meta(doc, 'description') or meta(doc, 'og:description', True))
     poster = meta(doc, 'og:image', True)
     poster = urllib.parse.urljoin(BASE, poster) if poster else ''
 
@@ -105,11 +111,11 @@ def parse_film(url):
         rating = m.group(1).replace(',', '.')
 
     genres = ''
-    m = re.search(r'Жанры\s*:\s*(.{2,80}?)(?:Дата\s+выхода|Год\s+реставрации|Длительность)', text, re.I)
+    m = re.search(r'Жанры\s*:?\s*(.{2,80}?)(?:Дата\s+выхода|Год\s+реставрации|Длительность)', text, re.I)
     if m:
         genres = clean_text(m.group(1))[:80]
 
-    slug = url.rstrip('/').split('/')[-1]
+    slug = urllib.parse.urlparse(url).path.rstrip('/').split('/')[-1]
     return {
         'id': 'mosfilm:' + slug,
         'type': 'movie',
@@ -142,23 +148,29 @@ def main():
         except Exception as e:
             print('index error', index, e)
 
-    print('candidate urls:', len(urls))
-    items = []
-    for n, u in enumerate(urls[:180], 1):
-        try:
-            item = parse_film(u)
-            if item:
-                items.append(item)
-                print(n, item['name'])
-        except Exception as e:
-            print('film error', u, e)
+    urls = urls[:180]
+    print('candidate urls:', len(urls), flush=True)
+    items_by_url = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(parse_film, u): u for u in urls}
+        for future in as_completed(futures):
+            u = futures[future]
+            try:
+                item = future.result()
+                if item:
+                    items_by_url[u] = item
+                    print('OK', item['name'], flush=True)
+            except Exception as e:
+                print('film error', u, e, flush=True)
 
-    # Keep a useful feed if the site temporarily returns fewer pages.
+    # Preserve source ordering so the UI stays stable across refreshes.
+    items = [items_by_url[u] for u in urls if u in items_by_url]
+
     if len(items) < 10:
         if os.path.exists(OUT):
-            print('too few new items, keeping existing autoplay feed:', len(items))
+            print('too few new items, keeping existing autoplay feed:', len(items), flush=True)
             return
-        raise SystemExit('Autoplay catalog too small')
+        raise SystemExit('Autoplay catalog too small: ' + str(len(items)))
 
     payload = {
         'version': 1,
@@ -169,7 +181,7 @@ def main():
     }
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
-    print('autoplay items:', len(items))
+    print('autoplay items:', len(items), flush=True)
 
 
 if __name__ == '__main__':
