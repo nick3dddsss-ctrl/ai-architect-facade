@@ -40,7 +40,9 @@ jobs:
         run: bash makeup-tv-v231/prepare_assets.sh
 
       - name: Patch v2.3.1 UI
-        run: python3 makeup-tv-v231/patch_v231.py
+        run: |
+          python3 makeup-tv-v231/patch_v231.py
+          python3 makeup-tv-v231/fix_java_strings.py
 
       - name: Build APK
         working-directory: /tmp/makeup231
