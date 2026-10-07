@@ -404,6 +404,7 @@ public class BeautyRunView extends View {
 
     private void drawPlatform(Canvas c, Platform q) {
         if(q.x+q.w<cameraX-20 || q.x>cameraX+VW+20) return;
+        p.setAlpha(255);
         p.setShader(new LinearGradient(0,q.y,0,q.y+q.h,0xFF9C4563,0xFF452C43,Shader.TileMode.CLAMP));
         c.drawRoundRect(new RectF(q.x,q.y,q.x+q.w,q.y+q.h),8,8,p);p.setShader(null);
         p.setColor(0xFFB78045);c.drawRoundRect(new RectF(q.x-2,q.y,q.x+q.w+2,q.y+10),5,5,p);
