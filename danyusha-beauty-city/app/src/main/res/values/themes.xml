@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Danyusha" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">#D95A84</item>
+        <item name="android:windowBackground">#221822</item>
+    </style>
+</resources>
