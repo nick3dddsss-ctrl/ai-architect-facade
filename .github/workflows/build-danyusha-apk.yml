@@ -43,16 +43,46 @@ jobs:
 
       - name: Build debug APK
         working-directory: danyusha-beauty-city
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDebug assembleDebugAndroidTest
 
       - name: Prepare APK
         run: |
           mkdir -p artifacts
-          cp danyusha-beauty-city/app/build/outputs/apk/debug/app-debug.apk artifacts/Danyusha_Beauty_City_v0.3-debug.apk
+          cp danyusha-beauty-city/app/build/outputs/apk/debug/app-debug.apk artifacts/Danyusha_Beauty_City_v0.4-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Danyusha_Beauty_City_v0.3_APK
-          path: artifacts/Danyusha_Beauty_City_v0.3-debug.apk
+          name: Danyusha_Beauty_City_v0.4_APK
+          path: artifacts/Danyusha_Beauty_City_v0.4-debug.apk
+          retention-days: 30
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 9 smoke and real render verification
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r danyusha-beauty-city/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r danyusha-beauty-city/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w com.danyusha.beautyrun.test/com.danyusha.beautyrun.SmokeInstrumentation | tee artifacts/smoke.txt
+            grep -q DANYUSHA_SMOKE_PASS artifacts/smoke.txt
+            adb exec-out run-as com.danyusha.beautyrun cat cache/title.png > artifacts/title.png
+            adb exec-out run-as com.danyusha.beautyrun cat cache/level.png > artifacts/level.png
+            adb exec-out run-as com.danyusha.beautyrun cat cache/jump.png > artifacts/jump.png
+
+      - name: Upload verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Danyusha_v0.4_verification
+          path: artifacts/
           retention-days: 30

@@ -2,6 +2,10 @@ package com.danyusha.beautyrun;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import java.io.InputStream;
+import java.io.IOException;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -38,6 +42,14 @@ public class BeautyRunView extends View {
     private final List<Enemy> enemies = new ArrayList<>();
     private final Player player = new Player();
 
+    private final Bitmap[] hero = new Bitmap[8];
+    private Bitmap cityArt, brushArt, enemyArt, goalArt, checkpointArt;
+    private final Paint artPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private float invincible = 0f;
+    private float runClock = 0f;
+    private float coyote = 0f;
+    private float jumpBuffer = 0f;
+    private final float[] checkpoints = {1010,1720,2580,3240,4110,4980};
     private int state = TITLE;
     private int lives = 3;
     private int collected = 0;
@@ -56,8 +68,23 @@ public class BeautyRunView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeWidth(3f);
         stroke.setStrokeCap(Paint.Cap.ROUND);
+        for (int i=0; i<hero.length; i++) hero[i] = loadArt("hero_"+i+".webp");
+        cityArt=loadArt("city.webp"); brushArt=loadArt("brush.webp");
+        enemyArt=loadArt("enemy.webp"); goalArt=loadArt("goal.webp"); checkpointArt=loadArt("checkpoint.webp");
         buildLevel();
         resetPlayer(false);
+    }
+
+    private Bitmap loadArt(String name) {
+        try (InputStream in=getContext().getAssets().open(name)) {
+            Bitmap b=BitmapFactory.decodeStream(in);
+            if (b==null) throw new IllegalStateException("Invalid art: "+name);
+            return b;
+        } catch(IOException ex) { throw new IllegalStateException("Missing art: "+name,ex); }
+    }
+
+    private void art(Canvas c, Bitmap b, float x, float y, float w, float h) {
+        c.drawBitmap(b,null,new RectF(x,y,x+w,y+h),artPaint);
     }
 
     private void buildLevel() {
@@ -115,6 +142,7 @@ public class BeautyRunView extends View {
     }
 
     private void startGame() {
+        leftHeld = rightHeld = false;
         lives = 3;
         collected = 0;
         buildLevel();
@@ -126,7 +154,9 @@ public class BeautyRunView extends View {
 
     private void resetPlayer(boolean checkpoint) {
         player.x = checkpoint ? Math.max(120f, player.checkpointX) : 120f;
-        player.y = 500f;
+        player.y = GROUND_Y - player.h;
+        invincible = checkpoint ? 1.8f : 0f;
+        coyote=0f; jumpBuffer=0f;
         player.vx = 0f;
         player.vy = 0f;
         player.facing = 1;
@@ -136,6 +166,7 @@ public class BeautyRunView extends View {
     }
 
     public void pauseGame() {
+        leftHeld=rightHeld=false;
         if (state == PLAYING) state = PAUSED;
     }
 
@@ -147,6 +178,7 @@ public class BeautyRunView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        canvas.drawColor(0xFF251B2A);
 
         float sx = getWidth() / VW;
         float sy = getHeight() / VH;
@@ -176,6 +208,14 @@ public class BeautyRunView extends View {
     }
 
     private void update(float dt) {
+        invincible=Math.max(0f,invincible-dt);
+        runClock+=Math.abs(player.vx)*dt/34f;
+        coyote=player.onGround ? 0.10f : Math.max(0f,coyote-dt);
+        jumpBuffer=Math.max(0f,jumpBuffer-dt);
+        if(jumpBuffer>0f && coyote>0f) {
+            player.vy=-650f; player.onGround=false; coyote=0f; jumpBuffer=0f;
+            tones.startTone(ToneGenerator.TONE_PROP_PROMPT,55);
+        }
         final float accel = 1700f;
         final float maxSpeed = 370f;
         final float friction = 2100f;
@@ -233,7 +273,7 @@ public class BeautyRunView extends View {
                 e.dir = -1;
             }
 
-            if (overlap(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
+            if (invincible<=0f && overlap(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
                 if (player.vy > 80f && oldBottom <= e.y + 12f) {
                     e.alive = false;
                     player.vy = -520f;
@@ -263,7 +303,7 @@ public class BeautyRunView extends View {
         else if (player.x > 1680f) player.checkpointX = 1680f;
         else if (player.x > 970f) player.checkpointX = 970f;
 
-        if (player.x > 6120f) {
+        if (player.x + player.w > 6190f && player.y + player.h > 500f) {
             state = WON;
             player.vx = 0f;
             tones.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 280);
@@ -298,11 +338,7 @@ public class BeautyRunView extends View {
             return;
         }
 
-        if (state == PLAYING && player.onGround) {
-            player.vy = -650f;
-            player.onGround = false;
-            tones.startTone(ToneGenerator.TONE_PROP_PROMPT, 55);
-        }
+        if (state == PLAYING) jumpBuffer=0.12f;
     }
 
     private void drawScene(Canvas c) {
@@ -332,54 +368,26 @@ public class BeautyRunView extends View {
     }
 
     private void drawBackground(Canvas c) {
-        p.setShader(new LinearGradient(0f, 0f, 0f, VH,
-                new int[]{0xFFF8DBE7, 0xFFF4C6D9, 0xFFFFEEE8},
-                new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP));
-        c.drawRect(0f, 0f, VW, VH, p);
-        p.setShader(null);
-
-        p.setColor(0x66FFFFFF);
-        c.drawCircle(1030f, 105f, 92f, p);
-
-        float parallax = -(cameraX * 0.16f) % 420f;
-        for (int i = -2; i < 6; i++) {
-            float x = parallax + i * 320f;
-
-            p.setColor(0x55FFFFFF);
-            c.drawRoundRect(new RectF(x, 235f, x + 155f, 570f), 24f, 24f, p);
-            c.drawRoundRect(new RectF(x + 175f, 295f, x + 300f, 570f), 18f, 18f, p);
-
-            p.setColor(0x55D88AA8);
-            c.drawRect(x + 24f, 275f, x + 40f, 540f, p);
-            c.drawRect(x + 66f, 260f, x + 82f, 540f, p);
-            c.drawRect(x + 108f, 290f, x + 124f, 540f, p);
-
-            p.setColor(0x448B4A67);
-            c.drawCircle(x + 245f, 272f, 30f, p);
-            c.drawRect(x + 238f, 295f, x + 252f, 565f, p);
+        float width=1080f;
+        float offset=-(cameraX*0.32f)%width;
+        int first=(int)Math.floor(cameraX*0.32f/width);
+        for(int i=-1;i<3;i++) {
+            float x=offset+i*width;
+            c.save();
+            if(((first+i)&1)!=0) { c.translate(x+width,0); c.scale(-1,1); art(c,cityArt,0,0,width,720); }
+            else art(c,cityArt,x,0,width,720);
+            c.restore();
         }
-
-        p.setColor(0xFFB85F83);
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setFakeBoldText(true);
-        p.setTextSize(32f);
-        c.drawText("BEAUTY CITY", 640f, 112f, p);
-        p.setFakeBoldText(false);
+        // Warm atmospheric veil keeps the playable foreground legible.
+        p.setColor(0x18FFF0E7); c.drawRect(0,0,VW,VH,p);
     }
 
     private void drawDecor(Canvas c) {
-        for (int i = 0; i < 14; i++) {
-            float x = 160f + i * 455f;
-            p.setColor(0x33B14E75);
-            c.drawCircle(x, 590f, 36f, p);
-            c.drawCircle(x + 22f, 568f, 28f, p);
-            p.setColor(0x665F8D68);
-            c.drawRect(x - 5f, 585f, x + 7f, 620f, p);
+        for(float x:checkpoints) {
+            if(x<cameraX-120 || x>cameraX+VW+120) continue;
+            artPaint.setAlpha(player.checkpointX>=x-60 ? 255 : 155);
+            art(c,checkpointArt,x,546,54,74); artPaint.setAlpha(255);
         }
-
-        drawBillboard(c, 860f, 180f, "BRAVE", "KIND");
-        drawBillboard(c, 2890f, 170f, "GLOW", "HIGHER");
-        drawBillboard(c, 4930f, 180f, "BEAUTY", "ADVENTURE");
     }
 
     private void drawBillboard(Canvas c, float x, float y, String a, String b) {
@@ -395,165 +403,56 @@ public class BeautyRunView extends View {
     }
 
     private void drawPlatform(Canvas c, Platform q) {
-        p.setColor(q.h > 40f ? 0xFF4A3343 : 0xFF6A4055);
-        c.drawRoundRect(new RectF(q.x, q.y, q.x + q.w, q.y + q.h), 14f, 14f, p);
-
-        p.setColor(0xFFE58BAB);
-        c.drawRoundRect(new RectF(q.x, q.y, q.x + q.w, q.y + Math.min(q.h, 18f)), 12f, 12f, p);
-
-        if (q.h > 40f) {
-            p.setColor(0xFF5E4053);
-            for (float xx = q.x + 35f; xx < q.x + q.w; xx += 68f) {
-                c.drawCircle(xx, q.y + 48f, 3f, p);
-                c.drawLine(xx - 18f, q.y + 28f, xx + 18f, q.y + 68f, p);
-                c.drawLine(xx + 18f, q.y + 28f, xx - 18f, q.y + 68f, p);
+        if(q.x+q.w<cameraX-20 || q.x>cameraX+VW+20) return;
+        p.setShader(new LinearGradient(0,q.y,0,q.y+q.h,0xFF9C4563,0xFF452C43,Shader.TileMode.CLAMP));
+        c.drawRoundRect(new RectF(q.x,q.y,q.x+q.w,q.y+q.h),8,8,p);p.setShader(null);
+        p.setColor(0xFFB78045);c.drawRoundRect(new RectF(q.x-2,q.y,q.x+q.w+2,q.y+10),5,5,p);
+        p.setColor(0xFFFFE2A9);c.drawRect(q.x+2,q.y,q.x+q.w-2,q.y+3,p);
+        p.setColor(0xFFE9ADB7);c.drawRect(q.x+4,q.y+10,q.x+q.w-4,q.y+16,p);
+        if(q.h>40) {
+            p.setColor(0xFF795164);
+            for(float x=q.x+30;x<q.x+q.w;x+=70) {
+                c.drawLine(x,q.y+22,x,q.y+q.h,p);
+                c.drawLine(x-30,q.y+52,x+30,q.y+52,p);
             }
+        } else {
+            p.setColor(0xFFD8AB6E);
+            for(float x=q.x+24;x<q.x+q.w-10;x+=48)c.drawCircle(x,q.y+22,2.5f,p);
         }
     }
 
     private void drawBrush(Canvas c, float x, float y) {
-        c.save();
-        c.rotate(-22f, x, y);
-
-        p.setColor(0x44FFF2C7);
-        c.drawCircle(x, y, 32f, p);
-
-        p.setColor(0xFFD98B34);
-        c.drawRoundRect(new RectF(x - 5f, y - 20f, x + 5f, y + 26f), 5f, 5f, p);
-
-        p.setColor(0xFFFFC7D7);
-        Path bristles = new Path();
-        bristles.moveTo(x - 12f, y - 23f);
-        bristles.quadTo(x, y - 43f, x + 12f, y - 23f);
-        bristles.lineTo(x + 5f, y - 12f);
-        bristles.lineTo(x - 5f, y - 12f);
-        bristles.close();
-        c.drawPath(bristles, p);
-
-        p.setColor(0xFFFFFFFF);
-        c.drawCircle(x + 20f, y - 22f, 3.5f, p);
-        c.drawCircle(x - 20f, y + 2f, 2.5f, p);
-        c.restore();
+        p.setColor(0x36FFF0A6);c.drawCircle(x,y,29,p);
+        art(c,brushArt,x-23,y-30,46,60);
+        p.setColor(0xFFFFE7A6);
+        float sparkle=3f+(float)Math.sin(elapsed*5+x)*1.5f;
+        c.drawCircle(x+25,y-20,sparkle,p);
     }
 
     private void drawEnemy(Canvas c, Enemy e) {
-        float bounce = (float) Math.sin(elapsed * 5f + e.x * 0.01f) * 2f;
-        float y = e.y + bounce;
-
-        p.setColor(0xFF7B4363);
-        c.drawRoundRect(new RectF(e.x, y, e.x + e.w, y + e.h), 12f, 12f, p);
-        p.setColor(0xFFE97DA3);
-        c.drawRoundRect(new RectF(e.x + 5f, y + 5f, e.x + e.w - 5f, y + e.h - 9f), 9f, 9f, p);
-
-        p.setColor(0xFF382432);
-        c.drawLine(e.x + 12f, y + 17f, e.x + 23f, y + 22f, p);
-        c.drawLine(e.x + e.w - 12f, y + 17f, e.x + e.w - 23f, y + 22f, p);
-        c.drawCircle(e.x + 20f, y + 24f, 3f, p);
-        c.drawCircle(e.x + e.w - 20f, y + 24f, 3f, p);
-
-        p.setColor(0xFFD7A044);
-        Path crown = new Path();
-        crown.moveTo(e.x + 13f, y + 2f);
-        crown.lineTo(e.x + 18f, y - 11f);
-        crown.lineTo(e.x + 26f, y - 2f);
-        crown.lineTo(e.x + 34f, y - 11f);
-        crown.lineTo(e.x + 40f, y + 2f);
-        crown.close();
-        c.drawPath(crown, p);
+        if(e.x<cameraX-100 || e.x>cameraX+VW+100)return;
+        float bob=(float)Math.sin(elapsed*9+e.x*0.01f)*2f;
+        c.save();c.translate(e.x+e.w/2,e.y+e.h);
+        c.scale(e.dir,1);
+        art(c,enemyArt,-e.w/2,-e.h+bob,e.w,e.h);
+        c.restore();
     }
 
     private void drawGoal(Canvas c, float x, float y) {
-        p.setColor(0x55FFE09B);
-        c.drawCircle(x + 42f, y + 35f, 78f, p);
-
-        p.setColor(0xFFE76995);
-        c.drawRoundRect(new RectF(x, y, x + 92f, y + 82f), 18f, 18f, p);
-        p.setColor(0xFFFFD99C);
-        c.drawRoundRect(new RectF(x + 8f, y + 12f, x + 84f, y + 28f), 8f, 8f, p);
-
-        p.setColor(0xFFD09A3D);
-        Path crown = new Path();
-        crown.moveTo(x + 26f, y + 55f);
-        crown.lineTo(x + 32f, y + 38f);
-        crown.lineTo(x + 45f, y + 50f);
-        crown.lineTo(x + 57f, y + 38f);
-        crown.lineTo(x + 65f, y + 55f);
-        crown.close();
-        c.drawPath(crown, p);
-
-        p.setColor(0xFFFFFFFF);
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setTextSize(18f);
-        p.setFakeBoldText(true);
-        c.drawText("FINISH", x + 46f, y - 20f, p);
-        p.setFakeBoldText(false);
+        p.setColor(0x55FFE09B); c.drawCircle(x+42,y+35,80,p);
+        art(c,goalArt,x-20,y-15,145,115);
+        p.setColor(0xFF552C44);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(22);p.setFakeBoldText(true);
+        c.drawText("ФИНИШ",x+50,y-27,p);p.setFakeBoldText(false);
     }
 
     private void drawDanyusha(Canvas c, float x, float y, int facing, float vx, float vy) {
-        c.save();
-        c.translate(x + player.w / 2f, y);
-        c.scale(facing, 1f);
-        c.translate(-player.w / 2f, 0f);
-
-        float run = Math.min(1f, Math.abs(vx) / 280f);
-        float phase = (float) Math.sin(elapsed * 12f) * run;
-        float armSwing = phase * 8f;
-        float legSwing = phase * 9f;
-        boolean airborne = Math.abs(vy) > 60f && !player.onGround;
-
-        p.setColor(0xFF392730);
-        c.drawOval(new RectF(7f, 0f, 49f, 48f), p);
-        c.drawOval(new RectF(34f, 10f, 56f, 52f), p);
-
-        p.setColor(0xFFF1C8B6);
-        c.drawOval(new RectF(16f, 8f, 45f, 42f), p);
-
-        p.setColor(0xFF6F8054);
-        c.drawCircle(34f, 22f, 2.2f, p);
-        p.setColor(0xFF34252A);
-        c.drawCircle(34f, 22f, 0.8f, p);
-
-        p.setColor(0xFFD46B82);
-        c.drawRoundRect(new RectF(29f, 31f, 37f, 33.5f), 2f, 2f, p);
-
-        p.setColor(0xFFE05E8B);
-        c.drawRoundRect(new RectF(8f, 39f, 50f, 67f), 8f, 8f, p);
-        p.setColor(0xFFFFF0EA);
-        c.drawRoundRect(new RectF(21f, 41f, 38f, 66f), 5f, 5f, p);
-
-        p.setColor(0xFFF0C4B0);
-        float armY = airborne ? 48f : 50f;
-        c.drawRoundRect(new RectF(2f, armY + armSwing * 0.4f, 12f, 70f + armSwing), 5f, 5f, p);
-        c.drawRoundRect(new RectF(46f, armY - armSwing * 0.4f, 56f, 70f - armSwing), 5f, 5f, p);
-
-        p.setColor(0xFF302B34);
-        if (airborne) {
-            c.drawRoundRect(new RectF(13f, 64f, 28f, 82f), 6f, 6f, p);
-            c.drawRoundRect(new RectF(31f, 64f, 47f, 82f), 6f, 6f, p);
-        } else {
-            c.drawRoundRect(new RectF(13f + legSwing, 64f, 28f + legSwing, 84f), 6f, 6f, p);
-            c.drawRoundRect(new RectF(31f - legSwing, 64f, 47f - legSwing, 84f), 6f, 6f, p);
-        }
-
-        p.setColor(0xFFE05E8B);
-        c.drawRect(16f, 70f, 23f, 76f, p);
-        c.drawRect(37f, 70f, 44f, 76f, p);
-
-        p.setColor(0xFFFFF3EE);
-        if (airborne) {
-            c.drawRoundRect(new RectF(10f, 80f, 30f, 88f), 5f, 5f, p);
-            c.drawRoundRect(new RectF(29f, 80f, 50f, 88f), 5f, 5f, p);
-        } else {
-            c.drawRoundRect(new RectF(9f + legSwing, 80f, 31f + legSwing, 88f), 5f, 5f, p);
-            c.drawRoundRect(new RectF(28f - legSwing, 80f, 50f - legSwing, 88f), 5f, 5f, p);
-        }
-
-        p.setColor(0xFF9D5C77);
-        c.drawRoundRect(new RectF(45f, 52f, 58f, 69f), 4f, 4f, p);
-        p.setColor(0xFFD5A140);
-        c.drawCircle(51.5f, 59f, 2.5f, p);
-
-        c.restore();
+        int frame=0;
+        if(!player.onGround && state==PLAYING) frame=vy<0?5:6;
+        else if(Math.abs(vx)>20) frame=1+((int)runClock%4);
+        if(invincible>0 && ((int)(elapsed*12)%2)==0)artPaint.setAlpha(115);
+        c.save();c.translate(x+player.w/2,y+player.h);c.scale(facing,1);
+        art(c,hero[frame],-54,-137,108,140);
+        c.restore();artPaint.setAlpha(255);
     }
 
     private void drawHud(Canvas c) {
@@ -571,6 +470,7 @@ public class BeautyRunView extends View {
         drawBrush(c, 227f, 57f);
         p.setTextAlign(Paint.Align.LEFT);
         p.setTextSize(24f);
+        p.setColor(0xFFFFFFFF);
         c.drawText(collected + " / " + totalBrushes, 257f, 65f, p);
 
         p.setColor(0xFFFF719A);
@@ -580,6 +480,8 @@ public class BeautyRunView extends View {
         c.drawText(hearts, 382f, 66f, p);
         p.setFakeBoldText(false);
 
+        p.setColor(0xAA39273A);c.drawRoundRect(new RectF(550,35,860,66),12,12,p);
+        p.setColor(0xFFE8B771);c.drawRoundRect(new RectF(554,39,554+302*clamp(player.x/6190f,0,1),62),9,9,p);
         p.setColor(0xC42F2330);
         c.drawRoundRect(new RectF(914f, 25f, 1252f, 82f), 18f, 18f, p);
         p.setColor(0xFFFFFFFF);
@@ -589,37 +491,22 @@ public class BeautyRunView extends View {
     }
 
     private void drawTitle(Canvas c) {
-        p.setColor(0xB8221824);
-        c.drawRect(0f, 0f, VW, VH, p);
-
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setColor(0xFFFFFFFF);
-        p.setFakeBoldText(true);
-        p.setTextSize(76f);
-        c.drawText("ДАНЮША", VW / 2f, 178f, p);
-
-        p.setColor(0xFFFF91B2);
-        p.setTextSize(36f);
-        c.drawText("BEAUTY CITY ADVENTURE", VW / 2f, 230f, p);
-        p.setFakeBoldText(false);
-
-        drawDanyusha(c, VW / 2f - 29f, 280f, 1, 0f, 0f);
-
-        p.setColor(0xFFFFFFFF);
-        p.setTextSize(24f);
-        c.drawText("Собирай кисти, прыгай по платформам и доберись до косметички", VW / 2f, 470f, p);
-
-        p.setColor(0xFFE05E8B);
-        c.drawRoundRect(new RectF(455f, 530f, 825f, 605f), 24f, 24f, p);
-        p.setColor(0xFFFFFFFF);
-        p.setFakeBoldText(true);
-        p.setTextSize(31f);
-        c.drawText("OK — ИГРАТЬ", VW / 2f, 578f, p);
-        p.setFakeBoldText(false);
-
-        p.setColor(0xFFEFE1E7);
-        p.setTextSize(18f);
-        c.drawText("Android TV: ← → движение  •  OK прыжок  •  Back пауза", VW / 2f, 665f, p);
+        p.setShader(new LinearGradient(0,0,1080,0,0xF52D1C30,0x763A2334,Shader.TileMode.CLAMP));
+        c.drawRect(0,0,VW,VH,p);p.setShader(null);
+        art(c,hero[0],815,150,355,462);
+        p.setTextAlign(Paint.Align.LEFT);p.setFakeBoldText(true);p.setColor(0xFFFFD6A5);p.setTextSize(19);
+        c.drawText("BEAUTY CITY  /  ПРИКЛЮЧЕНИЕ 01",86,145,p);
+        p.setColor(0xFFFFF2EB);p.setTextSize(86);c.drawText("ДАНЮША",80,260,p);
+        p.setColor(0xFFF4A5BB);p.setTextSize(31);c.drawText("Город, в котором начинается магия",86,320,p);
+        p.setFakeBoldText(false);p.setTextSize(25);p.setColor(0xFFFFE9E5);
+        c.drawText("Собирай кисти. Перепрыгивай препятствия.",86,392,p);
+        c.drawText("Найди волшебную косметичку!",86,429,p);
+        p.setColor(0xFFE06A91);c.drawRoundRect(new RectF(82,490,440,570),22,22,p);
+        p.setColor(0xFFFFE2B7);c.drawRoundRect(new RectF(86,494,436,500),3,3,p);
+        p.setColor(0xFFFFFFFF);p.setTextSize(29);p.setFakeBoldText(true);c.drawText("OK  —  НАЧАТЬ",132,542,p);
+        p.setFakeBoldText(false);p.setTextSize(19);p.setColor(0xFFE8CEDA);
+        c.drawText("← →  движение    •    OK  прыжок    •    Назад  пауза",86,635,p);
+        p.setTextSize(15);c.drawText("v0.4 · По первоначальному образу Данюши",86,675,p);
     }
 
     private void drawPause(Canvas c) {
@@ -697,11 +584,13 @@ public class BeautyRunView extends View {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_BUTTON_A:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_SPACE:
                 if (event.getRepeatCount() == 0) jump();
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (state == PLAYING) {
-                    state = PAUSED;
+                    pauseGame();
                     return true;
                 }
                 if (state == PAUSED) {
@@ -778,14 +667,14 @@ public class BeautyRunView extends View {
         final float minX;
         final float maxX;
         final float w = 52f;
-        final float h = 46f;
+        final float h = 68f;
         float speed = 88f;
         int dir = 1;
         boolean alive = true;
 
         Enemy(float x, float y, float minX, float maxX) {
             this.x = x;
-            this.y = y;
+            this.y = GROUND_Y - h;
             this.minX = minX;
             this.maxX = maxX;
         }
@@ -796,8 +685,8 @@ public class BeautyRunView extends View {
         float y;
         float vx;
         float vy;
-        final float w = 58f;
-        final float h = 88f;
+        final float w = 54f;
+        final float h = 124f;
         boolean onGround = false;
         int facing = 1;
         float checkpointX = 120f;
