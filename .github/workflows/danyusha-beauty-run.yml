@@ -27,11 +27,10 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install API 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK packages
+        run: |
+          yes | /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager --licenses >/dev/null || true
+          /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Unpack game
         run: |
@@ -39,6 +38,9 @@ jobs:
           unzip -o experiments/danyusha-beauty-run/project.zip -d build-danyusha
 
       - name: Build debug APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: gradle --no-daemon -p build-danyusha/danyusha_tv_game_vector :app:assembleDebug
 
       - name: Upload APK
