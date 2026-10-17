@@ -1,0 +1,83 @@
+name: NSPD parcel 8732 check
+
+on:
+  push:
+    branches:
+      - experiment/nspd-8732
+
+permissions: {}
+
+jobs:
+  cadastral-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install pynspd
+        run: |
+          python -m pip install --disable-pip-version-check 'pynspd==1.1.15'
+      - name: Query exact cadastral parcel
+        id: test
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import traceback
+          from pathlib import Path
+
+          number = "30:12:000000:8732"
+          result = {"cadastral_number": number, "status": "failure"}
+          success = False
+          try:
+              from pynspd import Nspd
+              from shapely.geometry import mapping
+              from pyproj import Geod
+
+              with Nspd() as client:
+                  feature = client.find(number)
+              if feature is None:
+                  raise RuntimeError("Nspd.find returned no matching feature")
+              if feature.geometry is None:
+                  raise RuntimeError("Found object has no geometry")
+
+              polygon = feature.geometry.to_shape()
+              if polygon.is_empty:
+                  raise RuntimeError("Feature geometry is empty")
+
+              minx, miny, maxx, maxy = polygon.bounds
+              if not (47 <= minx <= maxx <= 49 and 45 <= miny <= maxy <= 48):
+                  raise RuntimeError(f"Unexpected coordinate range: {polygon.bounds}")
+
+              area_m2 = abs(Geod(ellps="WGS84").geometry_area_perimeter(polygon)[0])
+              result.update({"status": "success", "bbox_wgs84": list(polygon.bounds),
+                             "area_m2_approx": round(area_m2, 2),
+                             "geometry_type": polygon.geom_type})
+              geojson = {"type": "FeatureCollection", "features": [{
+                  "type": "Feature",
+                  "properties": {"cadastral_number": number,
+                                 "source": "NSPD via pynspd; not a certified EGRN coordinate document"},
+                  "geometry": mapping(polygon)
+              }]}
+              Path("parcel_8732.geojson").write_text(
+                  json.dumps(geojson, ensure_ascii=False, indent=2), encoding="utf-8"
+              )
+              success = True
+          except Exception as exc:
+              result["error"] = repr(exc)
+              traceback.print_exc()
+
+          Path("check_result.json").write_text(
+              json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print("CADASTRAL_CHECK_RESULT", json.dumps(result, ensure_ascii=False))
+          if not success:
+              raise SystemExit(1)
+          PY
+      - name: Upload results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nspd-8732-result
+          path: |
+            parcel_8732.geojson
+            check_result.json
+          if-no-files-found: warn
